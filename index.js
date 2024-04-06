@@ -1,31 +1,149 @@
 const endpoint = "https://todo.hackrpi.com";
 
-const API_KEY = "INSERT_API_KEY_HERE";
+const API_KEY = "1aac84906c52c3b383a81bc9752464ab";
 
 //Get status with /status GET endpoint
 async function getStatus() {
+    try {
+        const response = await fetch(`${endpoint}/status`, { //endpoint refers to API website
+            method: 'GET', //A GET request is made to recieve data from the API
+            headers: {
+                'authorization':API_KEY, //Uses the API key for authentication
+                'Content-Type':'application/json', //Content type is from a JSON
+            }
+        });
+        const status = await response.json();
+        document.getElementById("status").innerText = status.message;
+    } catch(e){
+        console.error('Error getting status: ' + e);
+    }
 }
 
 async function fetchLists() {
-    
+    try {
+        let tempToken = "";
+        let lists = [];
+        do {
+            //GetLists/?nextToken=whatever
+            const response = await fetch(`${endpoint}/GetLists/${tempToken !== null ? "?" + new URLSearchParams({
+                nextToken: tempToken
+            }) : ""}`, {
+                method: 'GET',
+                headers: {
+                    'authorization': API_KEY,
+                    'Content-Type':'application/json',
+                }
+            });
+
+            const newLists = await response.json();
+            tempToken = "";
+
+            if(newLists.status == "200"){
+                lists = lists.concat(newLists.lists);
+                tempToken = newLists.nextToken;
+                console.log(lists);
+            }
+        } while(tempToken !== null);
+
+        await renderLists(lists);
+    } catch (e) {
+        console.error(e);
+    }
 }
 
 //Adds list through /AddList POST endpoint. 
 async function addList() {
     const title = newListInputElement.value.trim();
     if (title) {
-        
+        try {
+            const response = await fetch(`${endpoint}/AddList`, {
+                method: 'POST',
+                headers: {
+                    'authorization': API_KEY,
+                    'Content-Type':'application/json',
+                },
+                body: JSON.stringify({
+                    listName: title
+                })
+            });
+
+            const newList = await response.json();
+
+            if (newList.status == "200"){
+                renderList({
+                    id: newList.list.id,
+                    listName: newList.list.listName,
+                    items: []
+                });
+            }
+
+            newListInputElement.value = '';
+
+        } catch (e){
+            console.error('Error adding list: ' + e);
+        }
     }
 }
 
 //Deletes list through /DeleteList DELETE endpoint
 async function deleteList(listIdParam) {
-    
+    try{
+        await fetch(`${endpoint}/DeleteList?${new URLSearchParams({
+            listId: listIdParam,
+        })}`, {
+            method: 'DELETE',
+            headers: {
+                'authorization': API_KEY,
+                'Content-Type': 'application/json',
+            }
+        });
+
+        const listElement = document.getElementById(`list-${listIdParam}`);
+        listElement.classList.add("fadeOut");
+        
+        setTimeout(function () {
+            listElement.remove();
+        }, 500);
+    } catch (e) {
+        console.error("Error deleting list: " + e);
+    }
 }
 
 //Get all list items using GetListItems GET endpoint until next token is exhausted
-async function getListItems(listIdParam){
-    
+async function getListItems(listIDParam){
+    try {
+        let listItems = [];
+        const getListResponse = await loopRequest();
+        async function loopRequest(newToken = "") {
+            const response = await fetch(`${endpoint}/GetListItems/?${newToken !== null ? new URLSearchParams({
+                listId: listIDParam,
+                nextToken: newToken
+            }) : new URLSearchParams({
+                listId: listIDParam
+            })}`, {
+                method: 'GET',
+                headers: {
+                    'authorization': API_KEY,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            const newItems = await response.json();
+            if (newItems.status == "200") {
+                listItems = listItems.concat(newItems.listItems);
+            }
+
+            if (newItems.nextItem && newItems.nextToken !== null) {
+                return loopRequest(newItems.nextToken);
+            } else {
+                return listItems;
+            }
+        }
+
+        return getListResponse;
+    } catch (e) {
+        console.error('Error getting list items: ' + e);
+    }
 }
 
 //Adds task through /AddListItem post endpoint
@@ -33,24 +151,91 @@ async function addTask(listIdParam) {
     const taskInput = document.getElementById(`task-input-${listIdParam}`);
     const description = taskInput.value.trim();
     if (description) {
-        
+        try {
+            const response = await fetch(`${endpoint}/AddListItem/`, {
+                method: 'POST',
+                headers: {
+                    'authorization': API_KEY,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    listId: listIdParam,
+                    itemName: description
+                })
+            });
+
+            const newTask = await response.json();
+
+            if (newTask.status == "200"){
+                createTaskElement(newTask.listItem, listIdParam);
+            }
+
+            taskInput.value = '';
+        } catch (e) {
+            console.error('Error adding task: ', e);
+        }
     }
 }
 
 
 //Rename task through /RenameItem/ PATCH endpoint
 async function renameTask(thisItemId, newName) {
-    
+    try {
+        await fetch(`${endpoint}/RenameItem/?${new URLSearchParams({
+            itemId: thisItemId,
+            newItemName: newName
+        })}`, {
+            method: 'PATCH',
+            headers: {
+                'authorization': API_KEY,
+                'Content-Type': 'application/json'
+            }
+        });
+    } catch (e) {
+        console.log('Error renaming task: ' + e);
+    }
 }
 
 //Set checked task through /SetChecked/ PATCH endpoint
 async function setCheckedTask(thisItemId, newChecked) {
-    
+    try {
+        const response = await fetch(`${endpoint}/SetChecked/?${new URLSearchParams({
+            itemId: thisItemId,
+            checked: newChecked
+        })}`, {
+            method: 'PATCH',
+            headers: {
+                'authorization': API_KEY,
+                'Content-Type': 'application/json',
+            }
+        })
+    } catch (e) {
+        console.error('Error updating task: ' + e);
+    }
 }
 
 //Deletes task through /DeleteListItem/ DELETE endpoint
 async function deleteTask(taskId) {
-    
+    try {
+        await fetch(`${endpoint}/DeleteListItem/?${new URLSearchParams({
+            itemId: taskId,
+        })}`, {
+            method: 'DELETE',
+            headers: {
+                'authorization': API_KEY,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        const taskElement = document.getElementById(`task-${taskId}`);
+        taskElement.classList.add("fadeOut");;
+
+        setTimeout(function () {
+            taskElement.remove();
+        }, 500);
+    } catch (e) {
+        console.error('Error deleting task: ' + e);
+    }
 }
 
 
